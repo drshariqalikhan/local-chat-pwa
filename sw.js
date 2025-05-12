@@ -2,8 +2,6 @@ const CACHE_NAME = 'local-chat-v1';
 const URLS_TO_CACHE = [
   '.', // Alias for index.html
   'index.html',
-  'style.css',
-  'script.js',
   'manifest.json',
   'js/qrcode.min.js',
   'js/jsQR.js',
