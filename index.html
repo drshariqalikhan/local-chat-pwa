@@ -1,1 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Local Offline Chat</title>
+    <link rel="manifest" href="manifest.json">
+    <!-- iOS PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="LocalChat">
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
 
+    <style>
+        :root {
+            --background-color: #f4f4f4;
+            --text-color: #333;
+            --primary-color: #3367D6;
+            --secondary-color: #4285F4;
+            --border-color: #ccc;
+            --message-bg-me: #dcf8c6;
+            --message-bg-other: #fff;
+            --header-bg: #e9e9e9;
+            --modal-bg: rgba(0,0,0,0.6);
+            --log-bg: #e0e0e0;
+            --button-bg: var(--primary-color);
+            --button-text: white;
+        }
+
+        [data-theme="dark"] {
+            --background-color: #1e1e1e;
+            --text-color: #f1f1f1;
+            --primary-color: #709eff;
+            --secondary-color: #557ac7;
+            --border-color: #444;
+            --message-bg-me: #056162;
+            --message-bg-other: #262d31;
+            --header-bg: #2a2a2a;
+            --modal-bg: rgba(0,0,0,0.8);
+            --log-bg: #2c2c2c;
+            --button-bg: var(--primary-color);
+            --button-text: #121212;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 15px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border-color);
+            background-color: var(--header-bg);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        header h1 {
+            font-size: 1.5em;
+            margin: 0;
+        }
+
+        #darkModeToggle {
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            color: var(--text-color);
+        }
+
+        .hidden { display: none !important; }
+
+        #setupScreen, #chatScreen, #logScreen {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: var(--secondary-color-light, var(--background-color)); /* Lighter shade or same */
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        [data-theme="dark"] #setupScreen,
+        [data-theme="dark"] #chatScreen,
+        [data-theme="dark"] #logScreen {
+            background-color: var(--header-bg); /* Use header-bg for contrast */
+        }
+
+
+        #setupScreen input, #joinSessionIdInput {
+            display: block;
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: var(--button-bg);
+            color: var(--button-text);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+
+        #sessionInfo {
+            margin-bottom: 10px;
+            font-size: 0.9em;
+            padding: 5px;
+            background-color: var(--log-bg);
+            border-radius: 4px;
+        }
+
+        #connectedUsers {
+            margin-bottom: 15px;
+        }
+        #connectedUsers h3 { margin-top: 0;}
+        #userList {
+            list-style: none;
+            padding: 0;
+        }
+        #userList li {
+            padding: 3px 0;
+        }
+
+        #chatMessages {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            background-color: var(--background-color);
+        }
+
+        .message {
+            padding: 8px 12px;
+            border-radius: 15px;
+            margin-bottom: 8px;
+            max-width: 75%;
+            word-wrap: break-word;
+        }
+        .message .sender {
+            font-weight: bold;
+            display: block;
+            font-size: 0.8em;
+            margin-bottom: 2px;
+            color: var(--primary-color);
+        }
+        .message.me {
+            background-color: var(--message-bg-me);
+            margin-left: auto;
+            text-align: right;
+        }
+        .message.other {
+            background-color: var(--message-bg-other);
+            margin-right: auto;
+            text-align: left;
+        }
+        [data-theme="dark"] .message.me .sender,
+        [data-theme="dark"] .message.other .sender {
+            color: var(--primary-color); /* Ensure sender name is visible in dark mode */
+        }
+
+
+        #chatInput {
+            display: flex;
+        }
+        #messageInput {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px 0 0 4px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+        #sendMessageBtn {
+            border-radius: 0 4px 4px 0;
+        }
+
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--modal-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: var(--background-color);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            max-width: 90%;
+            width: 350px;
+            position: relative;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .close-button {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 1.8em;
+            font-weight: bold;
+            cursor: pointer;
+            color: var(--text-color);
+        }
+        #qrcodeDisplay {
+            margin: 20px auto;
+            width: 200px; /* Adjust as needed */
+            height: 200px;
+            border: 1px solid var(--border-color);
+        }
+        #qrcodeDisplay img {
+            display: block;
+            margin: auto;
+        }
+
+        #qrScannerVideo {
+            width: 100%;
+            max-width: 300px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        #logScreen {
+            margin-top: 30px;
+        }
+        #logScreen h3 {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #logOutput {
+            background-color: var(--log-bg);
+            color: var(--text-color);
+            padding: 10px;
+            border-radius: 4px;
+            height: 150px;
+            overflow-y: auto;
+            font-size: 0.8em;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Local Offline Chat</h1>
+            <button id="darkModeToggle">🌙</button>
+        </header>
+
+        <div id="setupScreen">
+            <h2>Setup</h2>
+            <input type="text" id="usernameInput" placeholder="Enter your name">
+            <button id="hostSessionBtn">Host New Session</button>
+            <p>OR</p>
+            <input type="text" id="joinSessionIdInput" placeholder="Enter Host ID to Join">
+            <button id="joinSessionBtn">Join Existing Session</button>
+        </div>
+
+        <div id="chatScreen" class="hidden">
+            <div id="sessionInfo">
+                Session ID: <strong id="displaySessionId">N/A</strong> | My Name: <strong id="displayMyName">N/A</strong>
+            </div>
+            <div id="connectedUsers">
+                <h3>Connected Users:</h3>
+                <ul id="userList"></ul>
+            </div>
+            <div id="chatMessages">
+                <!-- Messages will appear here -->
+            </div>
+            <div id="chatInput">
+                <input type="text" id="messageInput" placeholder="Type a message...">
+                <button id="sendMessageBtn">Send</button>
+            </div>
+        </div>
+
+        <div id="qrModal" class="modal hidden">
+            <div class="modal-content">
+                <span class="close-button" onclick="closeModal('qrModal')">×</span>
+                <h3 id="qrModalTitle">QR Code</h3>
+                <div id="qrcodeDisplay"></div>
+                <p id="qrInstructions"></p>
+            </div>
+        </div>
+
+        <div id="scannerModal" class="modal hidden">
+            <div class="modal-content">
+                <span class="close-button" onclick="closeModal('scannerModal'); stopScanner();">×</span>
+                <h3>Scan QR Code</h3>
+                <video id="qrScannerVideo" playsinline></video>
+                <canvas id="qrScannerCanvas" style="display: none;"></canvas>
+                <p>Point your camera at the QR code.</p>
+            </div>
+        </div>
+
+        <div id="logScreen">
+            <h3>Event & Error Log <button id="clearLogBtn">Clear</button></h3>
+            <pre id="logOutput"></pre>
+        </div>
+    </div>
+
+    <!-- External libraries loaded first -->
+    <script src="js/qrcode.min.js"></script>
+    <script src="js/jsQR.js"></script>
+
+    <script>
+        // --- START OF INLINED SCRIPT.JS CONTENT ---
+
+        // --- DOM Elements ---
+        const setupScreen = document.getElementById('setupScreen');
+        const chatScreen = document.getElementById('chatScreen');
+        const usernameInput = document.getElementById('usernameInput');
+        const hostSessionBtn = document.getElementById('hostSessionBtn');
+        const joinSessionIdInput = document.getElementById('joinSessionIdInput');
+        const joinSessionBtn = document.getElementById('joinSessionBtn');
+        const displaySessionId = document.getElementById('displaySessionId');
+        const displayMyName = document.getElementById('displayMyName');
+        const userList = document.getElementById('userList');
+        const chatMessages = document.getElementById('chatMessages');
+        const messageInput = document.getElementById('messageInput');
+        const sendMessageBtn = document.getElementById('sendMessageBtn');
+        const qrModal = document.getElementById('qrModal');
+        const qrModalTitle = document.getElementById('qrModalTitle');
+        const qrcodeDisplay = document.getElementById('qrcodeDisplay');
+        const qrInstructions = document.getElementById('qrInstructions');
+        const scannerModal = document.getElementById('scannerModal');
+        const qrScannerVideo = document.getElementById('qrScannerVideo');
+        const qrScannerCanvas = document.getElementById('qrScannerCanvas');
+        const logOutput = document.getElementById('logOutput');
+        const clearLogBtn = document.getElementById('clearLogBtn');
+        const darkModeToggle = document.getElementById('darkModeToggle');
+
+        // --- App State ---
+        let myUsername = '';
+        let isHost = false;
+        let sessionId = ''; // For host, this is self-generated. For client, this is the host's ID.
+        let localStream; // For camera
+        let qrCodeScannerInterval;
+
+        // WebRTC related
+        const peerConnections = {}; // Store peer connections, keyed by a unique peer ID
+        const dataChannels = {}; // Store data channels, keyed by a unique peer ID
+        let nextPeerId = 1; // Simple way to generate unique peer IDs for connections
+
+        const STUN_SERVER = 'stun:stun.l.google.com:19302'; // Public STUN server
+        const rtcConfig = {
+            iceServers: [{ urls: STUN_SERVER }]
+        };
+
+        // --- Logging ---
+        function logEvent(message, type = 'info') {
+            const now = new Date();
+            const timeString = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            const logEntry = document.createElement('div');
+            logEntry.textContent = `[${timeString}] [${type.toUpperCase()}] ${message}`;
+            if (type === 'error') logEntry.style.color = 'red';
+            if (type === 'success') logEntry.style.color = 'green';
+            logOutput.appendChild(logEntry);
+            logOutput.scrollTop = logOutput.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        // --- PWA Setup & Dark Mode ---
+        window.addEventListener('load', () => {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js') // sw.js is still external
+                    .then(() => logEvent('Service Worker Registered', 'success'))
+                    .catch(err => logEvent(`Service Worker Registration Failed: ${err}`, 'error'));
+            }
+            loadDarkModePreference();
+        });
+
+        darkModeToggle.addEventListener('click', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            if (currentTheme === 'dark') {
+                document.documentElement.removeAttribute('data-theme');
+                localStorage.removeItem('theme');
+                darkModeToggle.textContent = '🌙';
+            } else {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                localStorage.setItem('theme', 'dark');
+                darkModeToggle.textContent = '☀️';
+            }
+        });
+
+        function loadDarkModePreference() {
+            const theme = localStorage.getItem('theme');
+            if (theme === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+                darkModeToggle.textContent = '☀️';
+            } else {
+                darkModeToggle.textContent = '🌙';
+            }
+        }
+
+        // --- UI Controls ---
+        function showScreen(screenName) {
+            setupScreen.classList.add('hidden');
+            chatScreen.classList.add('hidden');
+            if (screenName === 'setup') setupScreen.classList.remove('hidden');
+            if (screenName === 'chat') chatScreen.classList.remove('hidden');
+        }
+
+        // Make closeModal global or attach to window if onclick attribute is used in HTML
+        window.closeModal = function(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+        // Make stopScanner global for the same reason
+        window.stopScanner = function() {
+             if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            if (qrCodeScannerInterval) {
+                cancelAnimationFrame(qrCodeScannerInterval);
+                qrCodeScannerInterval = null;
+            }
+            qrScannerVideo.srcObject = null; // Clear video src
+            logEvent('QR Scanner stopped.');
+        }
+
+
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.remove('hidden');
+        }
+
+        clearLogBtn.addEventListener('click', () => {
+            logOutput.innerHTML = '';
+        });
+
+        // --- QR Code Functionality ---
+        let qrGenerator;
+        function generateQRCode(data, title, instructions) {
+            if (!qrGenerator) {
+                // Ensure QRCode is available (it's loaded from qrcode.min.js)
+                if (typeof QRCode === 'undefined') {
+                    logEvent('QRCode library not loaded!', 'error');
+                    alert('Error: QR Code library not available.');
+                    return;
+                }
+                qrGenerator = new QRCode(qrcodeDisplay, {
+                    width: 200,
+                    height: 200,
+                    correctLevel: QRCode.CorrectLevel.M // Medium correction
+                });
+            }
+            qrGenerator.clear(); // Clear previous QR code
+            qrGenerator.makeCode(JSON.stringify(data)); // Always stringify complex data for QR
+            qrModalTitle.textContent = title;
+            qrInstructions.textContent = instructions;
+            openModal('qrModal');
+            logEvent(`Generated QR for: ${title}`);
+        }
+
+        function startQRScanner(onScanSuccess) {
+            // Ensure jsQR is available
+            if (typeof jsQR === 'undefined') {
+                logEvent('jsQR library not loaded!', 'error');
+                alert('Error: QR Scanner library not available.');
+                return;
+            }
+
+            const canvas = qrScannerCanvas;
+            const ctx = canvas.getContext('2d');
+
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                .then(stream => {
+                    localStream = stream;
+                    qrScannerVideo.srcObject = stream;
+                    qrScannerVideo.setAttribute("playsinline", true); // Required for iOS to play inline
+                    qrScannerVideo.play();
+                    openModal('scannerModal');
+                    logEvent('QR Scanner started. Camera access granted.');
+
+                    qrCodeScannerInterval = requestAnimationFrame(scanLoop);
+                })
+                .catch(err => {
+                    logEvent(`Error accessing camera: ${err}`, 'error');
+                    alert('Could not access camera. Please ensure permissions are granted.');
+                    closeModal('scannerModal'); // Close modal if camera fails
+                });
+
+            function scanLoop() {
+                if (qrScannerVideo.readyState === qrScannerVideo.HAVE_ENOUGH_DATA) {
+                    canvas.height = qrScannerVideo.videoHeight;
+                    canvas.width = qrScannerVideo.videoWidth;
+                    ctx.drawImage(qrScannerVideo, 0, 0, canvas.width, canvas.height);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: "dontInvert",
+                    });
+
+                    if (code) {
+                        logEvent(`QR Code detected: ${code.data}`, 'success');
+                        window.stopScanner(); // Use the globally accessible stopScanner
+                        closeModal('scannerModal');
+                        try {
+                            onScanSuccess(JSON.parse(code.data)); // Assume data is JSON
+                        } catch (e) {
+                            logEvent(`Error parsing QR code data: ${e}`, 'error');
+                            alert('Invalid QR code data format.');
+                        }
+                        return; // Exit loop
+                    }
+                }
+                if (!document.getElementById('scannerModal').classList.contains('hidden')) { // Check modal state directly
+                    requestAnimationFrame(scanLoop);
+                }
+            }
+        }
+
+        // --- WebRTC Core ---
+        function createPeerConnection(peerId, forHost) {
+            logEvent(`Creating peer connection for peer ${peerId}`);
+            const pc = new RTCPeerConnection(rtcConfig);
+            peerConnections[peerId] = pc;
+
+            pc.onicecandidate = event => {
+                if (event.candidate) {
+                    logEvent(`ICE candidate for ${peerId}: ${event.candidate.candidate.substring(0,30)}...`);
+                    if (isHost && pc.localDescription && pc.localDescription.type === 'answer') {
+                        generateQRCode({
+                            type: 'answer',
+                            sdp: pc.localDescription,
+                            fromPeerId: 'host',
+                            targetPeerId: peerId
+                        },
+                        'Host Answer for Client ' + peerId,
+                        'Client, scan this to complete connection.'
+                        );
+                    }
+                }
+            };
+
+            pc.oniceconnectionstatechange = () => {
+                logEvent(`ICE connection state for ${peerId}: ${pc.iceConnectionState}`);
+                if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+                    updateConnectedUsersDisplay();
+                }
+                if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'closed') {
+                    logEvent(`Peer ${peerId} disconnected or failed.`, 'error');
+                    cleanupPeer(peerId);
+                }
+            };
+
+            if (forHost) {
+                pc.ondatachannel = event => {
+                    logEvent(`Host received data channel from peer ${peerId}`);
+                    const dc = event.channel;
+                    dataChannels[peerId] = dc;
+                    setupDataChannelEvents(dc, peerId);
+                };
+            } else {
+                const dc = pc.createDataChannel('chatChannel', { reliable: true });
+                dataChannels[peerId] = dc;
+                setupDataChannelEvents(dc, peerId);
+            }
+            return pc;
+        }
+
+        function setupDataChannelEvents(dc, peerId) {
+            dc.onopen = () => {
+                logEvent(`Data channel with ${peerId} opened.`, 'success');
+                const announcement = { type: 'user_join', username: myUsername, id: isHost ? 'host' : sessionId + '_client_' + nextPeerId++ };
+                dc.send(JSON.stringify(announcement));
+                updateConnectedUsersDisplay();
+                if (isHost) {
+                    broadcastMessage(JSON.stringify(announcement), peerId);
+                    Object.keys(dataChannels).forEach(existingPeerId => {
+                        if (existingPeerId !== peerId && dataChannels[existingPeerId].readyState === 'open') {
+                             const existingUser = peerConnections[existingPeerId] ? (peerConnections[existingPeerId].remoteDescription ? "KnownUser" : "ConnectingUser") : "UnknownUser"; // Placeholder
+                            const existingUserAnnouncement = {type: 'user_join', username: existingUser, id: existingPeerId }; // Needs better username tracking
+                            dc.send(JSON.stringify(existingUserAnnouncement));
+                        }
+                    });
+                }
+            };
+
+            dc.onmessage = event => {
+                const msg = JSON.parse(event.data);
+                logEvent(`Message from ${peerId}: ${msg.type || 'text'}`, 'info');
+
+                if (msg.type === 'user_join') {
+                    addMessageToChat(msg.username, `${msg.username} joined the chat.`, false, 'system');
+                    updateConnectedUsersDisplay();
+                } else if (msg.type === 'user_leave') {
+                    addMessageToChat(msg.username, `${msg.username} left the chat.`, false, 'system');
+                    cleanupPeer(peerId);
+                } else {
+                    addMessageToChat(msg.sender, msg.text, false);
+                    if (isHost) {
+                        broadcastMessage(event.data, peerId);
+                    }
+                }
+            };
+
+            dc.onclose = () => {
+                logEvent(`Data channel with ${peerId} closed.`, 'warn');
+                cleanupPeer(peerId);
+            };
+            dc.onerror = error => {
+                logEvent(`Data channel error with ${peerId}: ${error}`, 'error');
+                cleanupPeer(peerId);
+            };
+        }
+
+        function cleanupPeer(peerId) {
+            if (peerConnections[peerId]) {
+                peerConnections[peerId].close();
+                delete peerConnections[peerId];
+            }
+            if (dataChannels[peerId]) {
+                delete dataChannels[peerId];
+            }
+            logEvent(`Cleaned up peer ${peerId}.`);
+            updateConnectedUsersDisplay();
+            if (isHost) {
+                broadcastMessage(JSON.stringify({ type: 'user_leave', username: `User-${peerId}` }), null); // Placeholder username
+            }
+        }
+
+        // --- Hosting Logic ---
+        hostSessionBtn.addEventListener('click', () => {
+            myUsername = usernameInput.value.trim();
+            if (!myUsername) {
+                alert('Please enter your name.');
+                return;
+            }
+            isHost = true;
+            sessionId = `host-${Math.random().toString(36).substring(2, 7)}`;
+            logEvent(`Starting host session. ID: ${sessionId}. Name: ${myUsername}`, 'success');
+
+            displaySessionId.textContent = sessionId;
+            displayMyName.textContent = myUsername;
+            showScreen('chat');
+            updateConnectedUsersDisplay();
+
+            generateQRCode(
+                { type: 'host_info', hostId: sessionId, hostName: myUsername },
+                `Host Session ID: ${sessionId}`,
+                "Clients: Scan this QR to get Host ID. Manually enter it to generate your connection offer."
+            );
+            const scanClientOfferBtn = document.createElement('button');
+            scanClientOfferBtn.textContent = 'Scan Client Offer QR';
+            scanClientOfferBtn.id = 'scanClientOfferBtn'; // Add an ID for potential removal/check
+            scanClientOfferBtn.onclick = () => {
+                startQRScanner(handleClientOffer);
+            };
+            const sessionInfoDiv = document.getElementById('sessionInfo');
+            // Prevent adding multiple buttons
+            if (!document.getElementById('scanClientOfferBtn')) {
+                sessionInfoDiv.appendChild(scanClientOfferBtn);
+            }
+        });
+
+        async function handleClientOffer(data) {
+            if (data.type !== 'offer' || !data.sdp || !data.fromPeerId) {
+                logEvent('Received invalid client offer QR data.', 'error');
+                alert('Invalid offer QR. Please ensure client generated it correctly.');
+                return;
+            }
+            const clientPeerId = data.fromPeerId;
+            logEvent(`Received offer from client ${clientPeerId}. Creating answer...`);
+
+            const pc = createPeerConnection(clientPeerId, true);
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+
+                logEvent(`Answer created for client ${clientPeerId}. Displaying answer QR.`);
+                 generateQRCode({
+                        type: 'answer',
+                        sdp: pc.localDescription,
+                        fromPeerId: sessionId,
+                        targetPeerId: clientPeerId
+                    },
+                    `Host Answer for ${data.clientName || clientPeerId}`,
+                    `Client ${data.clientName || clientPeerId}, scan this to complete connection.`
+                );
+            } catch (e) {
+                logEvent(`Error handling client offer: ${e}`, 'error');
+            }
+        }
+
+        // --- Joining Logic ---
+        joinSessionBtn.addEventListener('click', () => {
+            myUsername = usernameInput.value.trim();
+            const targetHostId = joinSessionIdInput.value.trim();
+
+            if (!myUsername) {
+                alert('Please enter your name.');
+                return;
+            }
+            if (!targetHostId) {
+                alert('Please enter the Host ID to join.');
+                return;
+            }
+
+            isHost = false;
+            sessionId = targetHostId;
+            const clientTempId = `client-${Math.random().toString(36).substring(2, 7)}`;
+            logEvent(`Attempting to join host ${sessionId} as ${myUsername} (my temp ID: ${clientTempId})`, 'success');
+
+            displaySessionId.textContent = `Joining: ${sessionId}`;
+            displayMyName.textContent = myUsername;
+            showScreen('chat');
+
+            const pc = createPeerConnection('host', false);
+            
+            pc.createOffer()
+                .then(offer => pc.setLocalDescription(offer))
+                .then(() => {
+                    logEvent('Client offer created. Displaying offer QR.');
+                    generateQRCode(
+                        {
+                            type: 'offer',
+                            sdp: pc.localDescription,
+                            fromPeerId: clientTempId,
+                            clientName: myUsername
+                        },
+                        `Offer from ${myUsername}`,
+                        `Host, scan this to accept connection from ${myUsername}.`
+                    );
+                    const scanHostAnswerBtn = document.createElement('button');
+                    scanHostAnswerBtn.textContent = 'Scan Host Answer QR';
+                    scanHostAnswerBtn.id = 'scanHostAnswerBtn'; // Add an ID
+                    scanHostAnswerBtn.onclick = () => {
+                        startQRScanner(handleHostAnswer);
+                    };
+                    const sessionInfoDiv = document.getElementById('sessionInfo');
+                    if (!document.getElementById('scanHostAnswerBtn')) {
+                        sessionInfoDiv.appendChild(scanHostAnswerBtn);
+                    }
+                })
+                .catch(e => logEvent(`Error creating client offer: ${e}`, 'error'));
+        });
+
+        async function handleHostAnswer(data) {
+            if (data.type !== 'answer' || !data.sdp) {
+                logEvent('Received invalid host answer QR data.', 'error');
+                alert('Invalid answer QR from host.');
+                return;
+            }
+            logEvent(`Received answer from host ${data.fromPeerId}. Setting remote description.`);
+            const pc = peerConnections['host'];
+            if (!pc) {
+                logEvent('No peer connection found to handle host answer.', 'error');
+                return;
+            }
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+                logEvent('Client successfully set remote description from host answer.', 'success');
+                const scanBtn = document.getElementById('scanHostAnswerBtn');
+                if (scanBtn) scanBtn.remove();
+            } catch (e) {
+                logEvent(`Error handling host answer: ${e}`, 'error');
+            }
+        }
+
+        // --- Messaging ---
+        sendMessageBtn.addEventListener('click', sendChatMessage);
+        messageInput.addEventListener('keypress', e => {
+            if (e.key === 'Enter') sendChatMessage();
+        });
+
+        function sendChatMessage() {
+            const text = messageInput.value.trim();
+            if (!text) return;
+
+            const messagePayload = {
+                sender: myUsername,
+                text: text,
+                timestamp: Date.now()
+            };
+
+            addMessageToChat(myUsername, text, true);
+
+            if (isHost) {
+                broadcastMessage(JSON.stringify(messagePayload));
+            } else {
+                if (dataChannels['host'] && dataChannels['host'].readyState === 'open') {
+                    dataChannels['host'].send(JSON.stringify(messagePayload));
+                } else {
+                    logEvent('Cannot send message: Not connected to host.', 'error');
+                    alert('Not connected to host.');
+                }
+            }
+            messageInput.value = '';
+        }
+
+        function broadcastMessage(messageString, excludePeerId = null) {
+            logEvent(`Broadcasting message (excluded: ${excludePeerId}): ${messageString.substring(0,50)}...`);
+            Object.keys(dataChannels).forEach(peerId => {
+                if (peerId !== excludePeerId && dataChannels[peerId].readyState === 'open') {
+                    try {
+                        dataChannels[peerId].send(messageString);
+                    } catch (e) {
+                        logEvent(`Error sending to ${peerId}: ${e.message}`, 'error');
+                    }
+                }
+            });
+        }
+
+        function addMessageToChat(senderName, text, isMe, type = 'user') {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message');
+            if (type === 'system') {
+                messageDiv.classList.add('system-message');
+                messageDiv.innerHTML = `<em>${text}</em>`;
+            } else {
+                messageDiv.classList.add(isMe ? 'me' : 'other');
+                const senderSpan = document.createElement('span');
+                senderSpan.classList.add('sender');
+                senderSpan.textContent = isMe ? 'You' : senderName;
+                messageDiv.appendChild(senderSpan);
+                messageDiv.appendChild(document.createTextNode(text));
+            }
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function updateConnectedUsersDisplay() {
+            userList.innerHTML = ''; 
+
+            const selfLi = document.createElement('li');
+            selfLi.textContent = `${myUsername} (You)${isHost ? ' [Host]' : ''}`;
+            userList.appendChild(selfLi);
+
+            Object.keys(dataChannels).forEach(peerId => {
+                if (dataChannels[peerId] && dataChannels[peerId].readyState === 'open') {
+                    // This needs a proper mapping from peerId to username, received during 'user_join'
+                    const peerUsername = `Peer-${peerId.substring(0,5)}`; // Placeholder
+                    const li = document.createElement('li');
+                    li.textContent = peerUsername;
+                    userList.appendChild(li);
+                }
+            });
+        }
+
+        // --- Initial UI State ---
+        showScreen('setup');
+        logEvent('App initialized. Ready for setup.');
+
+        // --- END OF INLINED SCRIPT.JS CONTENT ---
+    </script>
+</body>
+</html>
